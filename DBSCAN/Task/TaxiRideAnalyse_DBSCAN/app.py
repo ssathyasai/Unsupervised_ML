@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Page Configuration
-# ------------------------------------------------
+# ---------------------------------------------------
 st.set_page_config(
     page_title="NYC Taxi DBSCAN Clustering",
     page_icon="🚕",
@@ -17,53 +18,55 @@ st.set_page_config(
 )
 
 st.title("🚕 NYC Taxi Pickup Clustering using DBSCAN")
-st.markdown("Density-Based Clustering Analysis of Pickup Locations")
+st.markdown("### Density-Based Spatial Clustering (DBSCAN)")
 
-# ------------------------------------------------
-# Load Dataset
-# ------------------------------------------------
-import os
-
+# ---------------------------------------------------
+# Load Dataset (Safe Path for Streamlit Cloud)
+# ---------------------------------------------------
 @st.cache_data
 def load_data():
     current_dir = os.path.dirname(__file__)
     file_path = os.path.join(current_dir, "NewYorkCityTaxiTripDuration.csv")
-    
+
     df = pd.read_csv(file_path)
     df = df[['pickup_latitude', 'pickup_longitude']].dropna()
     return df
 
+try:
+    df = load_data()
+    st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
+except Exception as e:
+    st.error("Dataset not found. Make sure CSV is in same folder as app.py.")
+    st.stop()
 
-st.success("Dataset Loaded Successfully ✅ ")
-
-# ------------------------------------------------
+# ---------------------------------------------------
 # Sidebar Controls
-# ------------------------------------------------
+# ---------------------------------------------------
 st.sidebar.header("⚙️ DBSCAN Parameters")
 
 eps = st.sidebar.slider("Select eps value", 0.1, 1.0, 0.3, 0.1)
 min_samples = st.sidebar.slider("Select min_samples", 3, 20, 5)
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Data Scaling
-# ------------------------------------------------
+# ---------------------------------------------------
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(df)
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Model Training
-# ------------------------------------------------
+# ---------------------------------------------------
 db = DBSCAN(eps=eps, min_samples=min_samples)
 labels = db.fit_predict(X_scaled)
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Evaluation Metrics
-# ------------------------------------------------
+# ---------------------------------------------------
 n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
 n_noise = list(labels).count(-1)
 noise_ratio = n_noise / len(labels)
 
-# Remove noise for silhouette
+# Silhouette (remove noise)
 mask = labels != -1
 
 if len(set(labels[mask])) > 1:
@@ -71,23 +74,23 @@ if len(set(labels[mask])) > 1:
 else:
     silhouette = None
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Display Metrics
-# ------------------------------------------------
+# ---------------------------------------------------
 col1, col2, col3 = st.columns(3)
 
 col1.metric("📌 Clusters", n_clusters)
 col2.metric("⚠️ Noise Points", n_noise)
 col3.metric("📊 Noise Ratio", round(noise_ratio, 4))
 
-if silhouette:
+if silhouette is not None:
     st.info(f"Silhouette Score: {round(silhouette, 4)}")
 else:
     st.warning("Silhouette Score Not Applicable")
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Visualization
-# ------------------------------------------------
+# ---------------------------------------------------
 st.subheader("📍 Cluster Visualization")
 
 fig, ax = plt.subplots(figsize=(8,6))
@@ -119,8 +122,8 @@ ax.legend()
 
 st.pyplot(fig)
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # Footer
-# ------------------------------------------------
+# ---------------------------------------------------
 st.markdown("---")
-st.markdown("👨‍💻 Built with Streamlit | DBSCAN Unsupervised Learning Project")
+st.markdown("👨‍💻 Built with Streamlit | Unsupervised Learning Project")
