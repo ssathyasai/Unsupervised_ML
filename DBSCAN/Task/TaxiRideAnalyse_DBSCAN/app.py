@@ -6,12 +6,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import silhouette_score
 
-st.set_page_config(page_title="NYC Taxi DBSCAN Clustering", layout="wide")
+st.set_page_config(page_title="Taxi Ride DBSCAN Analysis", layout="wide")
 
-st.title("🚖 NYC Taxi Pickup Clustering using DBSCAN")
-st.markdown("Upload your dataset and explore clustering interactively.")
+st.title("🚖 Taxi Ride Clustering using DBSCAN")
 
-# Drag & Drop Upload
 uploaded_file = st.file_uploader(
     "📂 Drag and Drop your CSV file here",
     type=["csv"]
@@ -24,44 +22,72 @@ if uploaded_file is not None:
 
     st.success("Dataset Loaded Successfully!")
 
-    st.subheader("🔍 Dataset Preview")
+    st.subheader("Preview")
     st.dataframe(df.head())
 
     # Check required columns
-    if not {'pickup_latitude', 'pickup_longitude'}.issubset(df.columns):
-        st.error("Required columns not found! Dataset must contain pickup_latitude and pickup_longitude.")
+    required_cols = ['pickup_latitude', 'pickup_longitude']
+
+    if not set(required_cols).issubset(df.columns):
+        st.error("Dataset must contain pickup_latitude and pickup_longitude columns.")
         st.stop()
 
-    # Sampling for performance
+    # ======================================================
+    # CLEANING DATA (IMPORTANT FIX)
+    # ======================================================
+
+    df = df[required_cols]
+
+    # Convert to numeric (handle string issues)
+    df['pickup_latitude'] = pd.to_numeric(df['pickup_latitude'], errors='coerce')
+    df['pickup_longitude'] = pd.to_numeric(df['pickup_longitude'], errors='coerce')
+
+    # Remove NaN values
+    df = df.dropna()
+
+    # Remove impossible coordinates
+    df = df[
+        (df['pickup_latitude'].between(-90, 90)) &
+        (df['pickup_longitude'].between(-180, 180))
+    ]
+
+    if len(df) == 0:
+        st.error("No valid data left after cleaning!")
+        st.stop()
+
+    # Sampling large dataset
     if len(df) > 100000:
-        st.warning("Large dataset detected. Sampling 50,000 rows for performance.")
+        st.warning("Large dataset detected. Sampling 50,000 rows.")
         df = df.sample(50000, random_state=42)
 
-    # Feature Selection
+    st.success(f"Cleaned Dataset Size: {len(df)} rows")
+
+    # ======================================================
+    # FEATURE SELECTION
+    # ======================================================
     X = df[['pickup_latitude', 'pickup_longitude']]
 
-    # Standard Scaling
+    # Scaling
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    st.success("Data Preprocessing Completed")
-
-    st.sidebar.header("⚙️ DBSCAN Parameters")
+    # ======================================================
+    # DBSCAN Experiments
+    # ======================================================
 
     eps_values = [0.2, 0.3, 0.5]
-    min_samples = st.sidebar.slider("Min Samples", 3, 10, 5)
-
     results = []
 
     for eps in eps_values:
 
-        db = DBSCAN(eps=eps, min_samples=min_samples)
+        db = DBSCAN(eps=eps, min_samples=5)
         labels = db.fit_predict(X_scaled)
 
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         noise_points = np.sum(labels == -1)
         noise_ratio = noise_points / len(labels)
 
+        # Silhouette score
         mask = labels != -1
         if len(set(labels[mask])) > 1:
             sil_score = silhouette_score(X_scaled[mask], labels[mask])
@@ -71,25 +97,28 @@ if uploaded_file is not None:
         results.append({
             "eps": eps,
             "clusters": n_clusters,
-            "noise_points": noise_points,
             "noise_ratio": round(noise_ratio, 3),
-            "silhouette_score": sil_score,
+            "silhouette": sil_score,
             "labels": labels
         })
 
-    # Evaluation Table
+    # ======================================================
+    # EVALUATION TABLE
+    # ======================================================
     st.subheader("📊 Cluster Evaluation")
 
     eval_df = pd.DataFrame([{
         "eps": r["eps"],
         "Clusters": r["clusters"],
         "Noise Ratio": r["noise_ratio"],
-        "Silhouette Score": r["silhouette_score"]
+        "Silhouette Score": r["silhouette"]
     } for r in results])
 
     st.dataframe(eval_df)
 
-    # Visualization
+    # ======================================================
+    # VISUALIZATION
+    # ======================================================
     st.subheader("📍 Cluster Visualizations")
 
     for r in results:
@@ -97,11 +126,10 @@ if uploaded_file is not None:
         st.markdown(f"### eps = {r['eps']}")
 
         fig, ax = plt.subplots()
-
         labels = r["labels"]
-        unique_labels = set(labels)
 
-        for label in unique_labels:
+        for label in set(labels):
+
             if label == -1:
                 subset = X[labels == -1]
                 ax.scatter(
@@ -124,15 +152,17 @@ if uploaded_file is not None:
 
         st.pyplot(fig)
 
-    # Best Model Selection
+    # ======================================================
+    # BEST MODEL SELECTION
+    # ======================================================
     st.subheader("🏆 Best Model Selection")
 
     best_eps = None
     best_score = -1
 
     for r in results:
-        if r["silhouette_score"] is not None:
-            score = r["silhouette_score"] * (1 - r["noise_ratio"])
+        if r["silhouette"] is not None:
+            score = r["silhouette"] * (1 - r["noise_ratio"])
             if score > best_score:
                 best_score = score
                 best_eps = r["eps"]
@@ -140,4 +170,4 @@ if uploaded_file is not None:
     if best_eps:
         st.success(f"Best eps value = {best_eps}")
     else:
-        st.warning("No suitable model found.")
+        st.warning("Silhouette score not applicable.")
