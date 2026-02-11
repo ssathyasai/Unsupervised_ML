@@ -52,11 +52,24 @@ def load_data():
 # --------------------------------------------------
 # Load Data
 # --------------------------------------------------
-df, error = load_data()
+@st.cache_data
+def load_data():
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), "NewYorkCityTaxiTripDuration.csv")
 
-if error:
-    st.error(f"❌ Error: {error}")
-    st.stop()
+        if not os.path.exists(file_path):
+            return None, "Dataset file not found."
+
+        df = pd.read_csv(
+            file_path,
+            usecols=["pickup_latitude", "pickup_longitude"]
+        ).dropna()
+
+        return df, None
+
+    except Exception as e:
+        return None, str(e)
+
 
 st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
 
