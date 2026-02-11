@@ -37,7 +37,7 @@ st.subheader("📊 Dataset Preview (First 5 Rows)")
 st.dataframe(df.head())
 
 # ==========================================================
-# 2️⃣ Feature Selection + Data Cleaning
+# 2️⃣ Feature Selection + STRONG Data Cleaning
 # ==========================================================
 
 required_cols = ['pickup_latitude', 'pickup_longitude']
@@ -46,32 +46,38 @@ if not all(col in df.columns for col in required_cols):
     st.error("Dataset must contain 'pickup_latitude' and 'pickup_longitude' columns.")
     st.stop()
 
+# Select only needed columns
 X = df[['pickup_latitude', 'pickup_longitude']].copy()
 
-# Convert to numeric
-X['pickup_latitude'] = pd.to_numeric(X['pickup_latitude'], errors='coerce')
-X['pickup_longitude'] = pd.to_numeric(X['pickup_longitude'], errors='coerce')
+# Convert to numeric (force invalid to NaN)
+X = X.apply(pd.to_numeric, errors='coerce')
 
-# Remove infinite values
+# Replace infinite values
 X = X.replace([np.inf, -np.inf], np.nan)
 
-# Drop missing values
-before_rows = len(X)
+# Drop all NaN rows
 X = X.dropna()
-after_rows = len(X)
 
-st.write(f"🧹 Removed {before_rows - after_rows} invalid rows during cleaning.")
+# Reset index (VERY IMPORTANT)
+X = X.reset_index(drop=True)
+
+st.write("Valid rows after cleaning:", len(X))
 
 if len(X) < 10:
     st.error("Not enough valid data points after cleaning.")
     st.stop()
 
 # ==========================================================
-# 3️⃣ Data Preprocessing (StandardScaler)
+# 3️⃣ Data Preprocessing (Safe Scaling)
 # ==========================================================
 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
+
+# Extra safety check
+if np.isnan(X_scaled).any():
+    st.error("NaN values still detected after scaling.")
+    st.stop()
 
 # ==========================================================
 # 4️⃣ 5️⃣ 6️⃣ DBSCAN Experiments
