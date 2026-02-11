@@ -8,9 +8,9 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
-# ---------------------------------------------------
-# Page Configuration
-# ---------------------------------------------------
+# --------------------------------------------------
+# Page Config
+# --------------------------------------------------
 st.set_page_config(
     page_title="NYC Taxi DBSCAN Clustering",
     page_icon="🚕",
@@ -18,55 +18,83 @@ st.set_page_config(
 )
 
 st.title("🚕 NYC Taxi Pickup Clustering using DBSCAN")
-st.markdown("### Density-Based Spatial Clustering (DBSCAN)")
 
-# ---------------------------------------------------
-# Load Dataset (Safe Path for Streamlit Cloud)
-# ---------------------------------------------------
+# --------------------------------------------------
+# Safe Dataset Loader
+# --------------------------------------------------
 @st.cache_data
 def load_data():
-    current_dir = os.path.dirname(__file__)
-    file_path = os.path.join(current_dir, "NewYorkCityTaxiTripDuration.csv")
+    try:
+        current_dir = os.path.dirname(__file__)
+        file_path = os.path.join(current_dir, "NewYorkCityTaxiTripDuration.csv")
 
-    df = pd.read_csv(file_path)
-    df = df[['pickup_latitude', 'pickup_longitude']].dropna()
-    return df
+        if not os.path.exists(file_path):
+            return None, "Dataset file not found in project folder."
 
-try:
-    df = load_data()
-    st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
-except Exception as e:
-    st.error("Dataset not found. Make sure CSV is in same folder as app.py.")
+        df = pd.read_csv(file_path)
+
+        required_columns = ["pickup_latitude", "pickup_longitude"]
+
+        for col in required_columns:
+            if col not in df.columns:
+                return None, f"Column '{col}' not found in dataset."
+
+        df = df[required_columns].dropna()
+
+        if df.empty:
+            return None, "Dataset is empty after removing null values."
+
+        return df, None
+
+    except Exception as e:
+        return None, str(e)
+
+# --------------------------------------------------
+# Load Data
+# --------------------------------------------------
+df, error = load_data()
+
+if error:
+    st.error(f"❌ Error: {error}")
     st.stop()
 
-# ---------------------------------------------------
+st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
+
+# --------------------------------------------------
 # Sidebar Controls
-# ---------------------------------------------------
+# --------------------------------------------------
 st.sidebar.header("⚙️ DBSCAN Parameters")
 
-eps = st.sidebar.slider("Select eps value", 0.1, 1.0, 0.3, 0.1)
-min_samples = st.sidebar.slider("Select min_samples", 3, 20, 5)
+eps = st.sidebar.slider("eps value", 0.1, 1.0, 0.3, 0.1)
+min_samples = st.sidebar.slider("min_samples", 3, 20, 5)
 
-# ---------------------------------------------------
-# Data Scaling
-# ---------------------------------------------------
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(df)
+# --------------------------------------------------
+# Scaling
+# --------------------------------------------------
+try:
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df)
+except Exception as e:
+    st.error(f"Scaling Error: {e}")
+    st.stop()
 
-# ---------------------------------------------------
+# --------------------------------------------------
 # Model Training
-# ---------------------------------------------------
-db = DBSCAN(eps=eps, min_samples=min_samples)
-labels = db.fit_predict(X_scaled)
+# --------------------------------------------------
+try:
+    db = DBSCAN(eps=eps, min_samples=min_samples)
+    labels = db.fit_predict(X_scaled)
+except Exception as e:
+    st.error(f"Model Error: {e}")
+    st.stop()
 
-# ---------------------------------------------------
-# Evaluation Metrics
-# ---------------------------------------------------
+# --------------------------------------------------
+# Metrics
+# --------------------------------------------------
 n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
 n_noise = list(labels).count(-1)
 noise_ratio = n_noise / len(labels)
 
-# Silhouette (remove noise)
 mask = labels != -1
 
 if len(set(labels[mask])) > 1:
@@ -74,56 +102,52 @@ if len(set(labels[mask])) > 1:
 else:
     silhouette = None
 
-# ---------------------------------------------------
-# Display Metrics
-# ---------------------------------------------------
 col1, col2, col3 = st.columns(3)
 
-col1.metric("📌 Clusters", n_clusters)
-col2.metric("⚠️ Noise Points", n_noise)
-col3.metric("📊 Noise Ratio", round(noise_ratio, 4))
+col1.metric("Clusters", n_clusters)
+col2.metric("Noise Points", n_noise)
+col3.metric("Noise Ratio", round(noise_ratio, 4))
 
 if silhouette is not None:
     st.info(f"Silhouette Score: {round(silhouette, 4)}")
 else:
     st.warning("Silhouette Score Not Applicable")
 
-# ---------------------------------------------------
+# --------------------------------------------------
 # Visualization
-# ---------------------------------------------------
-st.subheader("📍 Cluster Visualization")
+# --------------------------------------------------
+st.subheader("Cluster Visualization")
 
-fig, ax = plt.subplots(figsize=(8,6))
+try:
+    fig, ax = plt.subplots(figsize=(8, 6))
+    unique_labels = set(labels)
 
-unique_labels = set(labels)
+    for label in unique_labels:
+        if label == -1:
+            ax.scatter(
+                X_scaled[labels == label, 0],
+                X_scaled[labels == label, 1],
+                c='black',
+                marker='x',
+                s=10,
+                label="Noise"
+            )
+        else:
+            ax.scatter(
+                X_scaled[labels == label, 0],
+                X_scaled[labels == label, 1],
+                s=10,
+                label=f"Cluster {label}"
+            )
 
-for label in unique_labels:
-    if label == -1:
-        color = 'black'
-        marker = 'x'
-        label_name = 'Noise'
-    else:
-        color = None
-        marker = 'o'
-        label_name = f'Cluster {label}'
-    
-    ax.scatter(
-        X_scaled[labels == label, 0],
-        X_scaled[labels == label, 1],
-        c=color,
-        marker=marker,
-        label=label_name,
-        s=10
-    )
+    ax.set_xlabel("Latitude (Scaled)")
+    ax.set_ylabel("Longitude (Scaled)")
+    ax.legend()
 
-ax.set_xlabel("Latitude (Scaled)")
-ax.set_ylabel("Longitude (Scaled)")
-ax.legend()
+    st.pyplot(fig)
 
-st.pyplot(fig)
+except Exception as e:
+    st.error(f"Plotting Error: {e}")
 
-# ---------------------------------------------------
-# Footer
-# ---------------------------------------------------
 st.markdown("---")
-st.markdown("👨‍💻 Built with Streamlit | Unsupervised Learning Project")
+st.markdown("Built with Streamlit 🚀 | Fully Error-Handled Version")
