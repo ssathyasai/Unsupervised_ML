@@ -22,13 +22,17 @@ st.markdown("Density-Based Clustering Analysis of Pickup Locations")
 # ------------------------------------------------
 # Load Dataset
 # ------------------------------------------------
+import os
+
 @st.cache_data
 def load_data():
-    df = pd.read_csv("NewYorkCityTaxiTripDuration.csv")
+    current_dir = os.path.dirname(__file__)
+    file_path = os.path.join(current_dir, "NewYorkCityTaxiTripDuration.csv")
+    
+    df = pd.read_csv(file_path)
     df = df[['pickup_latitude', 'pickup_longitude']].dropna()
     return df
 
-df = load_data()
 
 st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
 
