@@ -2,172 +2,121 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
-st.set_page_config(page_title="Taxi Ride DBSCAN Analysis", layout="wide")
-
-st.title("🚖 Taxi Ride Clustering using DBSCAN")
-
-uploaded_file = st.file_uploader(
-    "📂 Drag and Drop your CSV file here",
-    type=["csv"]
+# ------------------------------------------------
+# Page Configuration
+# ------------------------------------------------
+st.set_page_config(
+    page_title="NYC Taxi DBSCAN Clustering",
+    page_icon="🚕",
+    layout="wide"
 )
 
-if uploaded_file is not None:
+st.title("🚕 NYC Taxi Pickup Clustering using DBSCAN")
+st.markdown("Density-Based Clustering Analysis of Pickup Locations")
 
-    with st.spinner("Loading dataset..."):
-        df = pd.read_csv(uploaded_file)
+# ------------------------------------------------
+# Load Dataset
+# ------------------------------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_csv("NewYorkCityTaxiTripDuration.csv")
+    df = df[['pickup_latitude', 'pickup_longitude']].dropna()
+    return df
 
-    st.success("Dataset Loaded Successfully!")
+df = load_data()
 
-    st.subheader("Preview")
-    st.dataframe(df.head())
+st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
 
-    # Check required columns
-    required_cols = ['pickup_latitude', 'pickup_longitude']
+# ------------------------------------------------
+# Sidebar Controls
+# ------------------------------------------------
+st.sidebar.header("⚙️ DBSCAN Parameters")
 
-    if not set(required_cols).issubset(df.columns):
-        st.error("Dataset must contain pickup_latitude and pickup_longitude columns.")
-        st.stop()
+eps = st.sidebar.slider("Select eps value", 0.1, 1.0, 0.3, 0.1)
+min_samples = st.sidebar.slider("Select min_samples", 3, 20, 5)
 
-    # ======================================================
-    # CLEANING DATA (IMPORTANT FIX)
-    # ======================================================
+# ------------------------------------------------
+# Data Scaling
+# ------------------------------------------------
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df)
 
-    df = df[required_cols]
+# ------------------------------------------------
+# Model Training
+# ------------------------------------------------
+db = DBSCAN(eps=eps, min_samples=min_samples)
+labels = db.fit_predict(X_scaled)
 
-    # Convert to numeric (handle string issues)
-    df['pickup_latitude'] = pd.to_numeric(df['pickup_latitude'], errors='coerce')
-    df['pickup_longitude'] = pd.to_numeric(df['pickup_longitude'], errors='coerce')
+# ------------------------------------------------
+# Evaluation Metrics
+# ------------------------------------------------
+n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+n_noise = list(labels).count(-1)
+noise_ratio = n_noise / len(labels)
 
-    # Remove NaN values
-    df = df.dropna()
+# Remove noise for silhouette
+mask = labels != -1
 
-    # Remove impossible coordinates
-    df = df[
-        (df['pickup_latitude'].between(-90, 90)) &
-        (df['pickup_longitude'].between(-180, 180))
-    ]
+if len(set(labels[mask])) > 1:
+    silhouette = silhouette_score(X_scaled[mask], labels[mask])
+else:
+    silhouette = None
 
-    if len(df) == 0:
-        st.error("No valid data left after cleaning!")
-        st.stop()
+# ------------------------------------------------
+# Display Metrics
+# ------------------------------------------------
+col1, col2, col3 = st.columns(3)
 
-    # Sampling large dataset
-    if len(df) > 100000:
-        st.warning("Large dataset detected. Sampling 50,000 rows.")
-        df = df.sample(50000, random_state=42)
+col1.metric("📌 Clusters", n_clusters)
+col2.metric("⚠️ Noise Points", n_noise)
+col3.metric("📊 Noise Ratio", round(noise_ratio, 4))
 
-    st.success(f"Cleaned Dataset Size: {len(df)} rows")
+if silhouette:
+    st.info(f"Silhouette Score: {round(silhouette, 4)}")
+else:
+    st.warning("Silhouette Score Not Applicable")
 
-    # ======================================================
-    # FEATURE SELECTION
-    # ======================================================
-    X = df[['pickup_latitude', 'pickup_longitude']]
+# ------------------------------------------------
+# Visualization
+# ------------------------------------------------
+st.subheader("📍 Cluster Visualization")
 
-    # Scaling
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+fig, ax = plt.subplots(figsize=(8,6))
 
-    # ======================================================
-    # DBSCAN Experiments
-    # ======================================================
+unique_labels = set(labels)
 
-    eps_values = [0.2, 0.3, 0.5]
-    results = []
-
-    for eps in eps_values:
-
-        db = DBSCAN(eps=eps, min_samples=5)
-        labels = db.fit_predict(X_scaled)
-
-        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        noise_points = np.sum(labels == -1)
-        noise_ratio = noise_points / len(labels)
-
-        # Silhouette score
-        mask = labels != -1
-        if len(set(labels[mask])) > 1:
-            sil_score = silhouette_score(X_scaled[mask], labels[mask])
-        else:
-            sil_score = None
-
-        results.append({
-            "eps": eps,
-            "clusters": n_clusters,
-            "noise_ratio": round(noise_ratio, 3),
-            "silhouette": sil_score,
-            "labels": labels
-        })
-
-    # ======================================================
-    # EVALUATION TABLE
-    # ======================================================
-    st.subheader("📊 Cluster Evaluation")
-
-    eval_df = pd.DataFrame([{
-        "eps": r["eps"],
-        "Clusters": r["clusters"],
-        "Noise Ratio": r["noise_ratio"],
-        "Silhouette Score": r["silhouette"]
-    } for r in results])
-
-    st.dataframe(eval_df)
-
-    # ======================================================
-    # VISUALIZATION
-    # ======================================================
-    st.subheader("📍 Cluster Visualizations")
-
-    for r in results:
-
-        st.markdown(f"### eps = {r['eps']}")
-
-        fig, ax = plt.subplots()
-        labels = r["labels"]
-
-        for label in set(labels):
-
-            if label == -1:
-                subset = X[labels == -1]
-                ax.scatter(
-                    subset['pickup_latitude'],
-                    subset['pickup_longitude'],
-                    marker='x',
-                    label='Noise'
-                )
-            else:
-                subset = X[labels == label]
-                ax.scatter(
-                    subset['pickup_latitude'],
-                    subset['pickup_longitude'],
-                    label=f'Cluster {label}'
-                )
-
-        ax.set_xlabel("Latitude")
-        ax.set_ylabel("Longitude")
-        ax.legend()
-
-        st.pyplot(fig)
-
-    # ======================================================
-    # BEST MODEL SELECTION
-    # ======================================================
-    st.subheader("🏆 Best Model Selection")
-
-    best_eps = None
-    best_score = -1
-
-    for r in results:
-        if r["silhouette"] is not None:
-            score = r["silhouette"] * (1 - r["noise_ratio"])
-            if score > best_score:
-                best_score = score
-                best_eps = r["eps"]
-
-    if best_eps:
-        st.success(f"Best eps value = {best_eps}")
+for label in unique_labels:
+    if label == -1:
+        color = 'black'
+        marker = 'x'
+        label_name = 'Noise'
     else:
-        st.warning("Silhouette score not applicable.")
+        color = None
+        marker = 'o'
+        label_name = f'Cluster {label}'
+    
+    ax.scatter(
+        X_scaled[labels == label, 0],
+        X_scaled[labels == label, 1],
+        c=color,
+        marker=marker,
+        label=label_name,
+        s=10
+    )
+
+ax.set_xlabel("Latitude (Scaled)")
+ax.set_ylabel("Longitude (Scaled)")
+ax.legend()
+
+st.pyplot(fig)
+
+# ------------------------------------------------
+# Footer
+# ------------------------------------------------
+st.markdown("---")
+st.markdown("👨‍💻 Built with Streamlit | DBSCAN Unsupervised Learning Project")
