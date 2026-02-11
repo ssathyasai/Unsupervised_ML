@@ -34,7 +34,7 @@ def load_data():
     return df
 
 
-st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
+st.success(f"Dataset Loaded Successfully ✅ )
 
 # ------------------------------------------------
 # Sidebar Controls
