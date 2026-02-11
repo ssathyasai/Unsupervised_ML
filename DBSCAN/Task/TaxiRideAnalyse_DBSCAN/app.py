@@ -25,56 +25,44 @@ st.title("🚕 NYC Taxi Pickup Clustering using DBSCAN")
 @st.cache_data
 def load_data():
     try:
-        current_dir = os.path.dirname(__file__)
-        file_path = os.path.join(current_dir, "NewYorkCityTaxiTripDuration.csv")
+        file_path = os.path.join(
+            os.path.dirname(__file__),
+            "NewYorkCityTaxiTripDuration.csv"
+        )
 
         if not os.path.exists(file_path):
-            return None, "Dataset file not found in project folder."
-
-        df = pd.read_csv(file_path)
-
-        required_columns = ["pickup_latitude", "pickup_longitude"]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return None, f"Column '{col}' not found in dataset."
-
-        df = df[required_columns].dropna()
-
-        if df.empty:
-            return None, "Dataset is empty after removing null values."
-
-        return df, None
-
-    except Exception as e:
-        return None, str(e)
-
-# --------------------------------------------------
-# Load Data
-# --------------------------------------------------
-@st.cache_data
-def load_data():
-    try:
-        file_path = os.path.join(os.path.dirname(__file__), "NewYorkCityTaxiTripDuration.csv")
-
-        if not os.path.exists(file_path):
-            return None, "Dataset file not found."
+            return None
 
         df = pd.read_csv(
             file_path,
             usecols=["pickup_latitude", "pickup_longitude"]
-        ).dropna()
+        )
 
-        return df, None
+        df = df.dropna()
 
-    except Exception as e:
-        return None, str(e)
+        if df.empty:
+            return None
 
+        return df
 
-st.success(f"Dataset Loaded Successfully ✅")
+    except:
+        return None
+
 
 # --------------------------------------------------
-# Sidebar Controls
+# Load Data
+# --------------------------------------------------
+df = load_data()
+
+if df is None:
+    st.error("❌ Dataset not found OR invalid format.")
+    st.info("Make sure NewYorkCityTaxiTripDuration.csv is in SAME folder as app.py")
+    st.stop()
+
+st.success(f"Dataset Loaded Successfully ✅ | Total Records: {len(df)}")
+
+# --------------------------------------------------
+# Sidebar
 # --------------------------------------------------
 st.sidebar.header("⚙️ DBSCAN Parameters")
 
@@ -84,22 +72,14 @@ min_samples = st.sidebar.slider("min_samples", 3, 20, 5)
 # --------------------------------------------------
 # Scaling
 # --------------------------------------------------
-try:
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df)
-except Exception as e:
-    st.error(f"Scaling Error: {e}")
-    st.stop()
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df)
 
 # --------------------------------------------------
-# Model Training
+# Model
 # --------------------------------------------------
-try:
-    db = DBSCAN(eps=eps, min_samples=min_samples)
-    labels = db.fit_predict(X_scaled)
-except Exception as e:
-    st.error(f"Model Error: {e}")
-    st.stop()
+db = DBSCAN(eps=eps, min_samples=min_samples)
+labels = db.fit_predict(X_scaled)
 
 # --------------------------------------------------
 # Metrics
@@ -127,40 +107,37 @@ else:
     st.warning("Silhouette Score Not Applicable")
 
 # --------------------------------------------------
-# Visualization
+# Plot
 # --------------------------------------------------
 st.subheader("Cluster Visualization")
 
-try:
-    fig, ax = plt.subplots(figsize=(8, 6))
-    unique_labels = set(labels)
+fig, ax = plt.subplots(figsize=(8, 6))
 
-    for label in unique_labels:
-        if label == -1:
-            ax.scatter(
-                X_scaled[labels == label, 0],
-                X_scaled[labels == label, 1],
-                c='black',
-                marker='x',
-                s=10,
-                label="Noise"
-            )
-        else:
-            ax.scatter(
-                X_scaled[labels == label, 0],
-                X_scaled[labels == label, 1],
-                s=10,
-                label=f"Cluster {label}"
-            )
+unique_labels = set(labels)
 
-    ax.set_xlabel("Latitude (Scaled)")
-    ax.set_ylabel("Longitude (Scaled)")
-    ax.legend()
+for label in unique_labels:
+    if label == -1:
+        ax.scatter(
+            X_scaled[labels == label, 0],
+            X_scaled[labels == label, 1],
+            c="black",
+            marker="x",
+            s=10,
+            label="Noise"
+        )
+    else:
+        ax.scatter(
+            X_scaled[labels == label, 0],
+            X_scaled[labels == label, 1],
+            s=10,
+            label=f"Cluster {label}"
+        )
 
-    st.pyplot(fig)
+ax.set_xlabel("Latitude (Scaled)")
+ax.set_ylabel("Longitude (Scaled)")
+ax.legend()
 
-except Exception as e:
-    st.error(f"Plotting Error: {e}")
+st.pyplot(fig)
 
 st.markdown("---")
-st.markdown("Built with Streamlit 🚀 | Fully Error-Handled Version")
+st.markdown("Built with Streamlit 🚀")
