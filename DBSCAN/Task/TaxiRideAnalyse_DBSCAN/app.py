@@ -1,5 +1,5 @@
 # ==========================================================
-# 🚕 ClusterCab - Multi-Experiment DBSCAN Taxi Analysis
+# 🚕 ClusterCab Pro - Multi-Experiment DBSCAN Analysis
 # ==========================================================
 
 import streamlit as st
@@ -10,10 +10,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import silhouette_score
 
-st.set_page_config(page_title="ClusterCab Pro", page_icon="🚕", layout="wide")
+# ---------------- PAGE CONFIG ---------------- #
+st.set_page_config(
+    page_title="ClusterCab Pro",
+    page_icon="🚕",
+    layout="wide"
+)
 
-st.title("🚕 ClusterCab Pro - DBSCAN Taxi Hotspot Analysis")
-st.markdown("Performing **3 DBSCAN Experiments** with different eps values.")
+st.title("🚕 ClusterCab Pro - Taxi Pickup Hotspot Detection")
+st.markdown("Density-Based Spatial Clustering using **DBSCAN**")
 st.markdown("---")
 
 # ==========================================================
@@ -32,16 +37,34 @@ st.subheader("📊 Dataset Preview (First 5 Rows)")
 st.dataframe(df.head())
 
 # ==========================================================
-# 2️⃣ Feature Selection
+# 2️⃣ Feature Selection + Data Cleaning
 # ==========================================================
 
 required_cols = ['pickup_latitude', 'pickup_longitude']
 
 if not all(col in df.columns for col in required_cols):
-    st.error("Dataset must contain pickup_latitude & pickup_longitude columns.")
+    st.error("Dataset must contain 'pickup_latitude' and 'pickup_longitude' columns.")
     st.stop()
 
-X = df[['pickup_latitude', 'pickup_longitude']]
+X = df[['pickup_latitude', 'pickup_longitude']].copy()
+
+# Convert to numeric
+X['pickup_latitude'] = pd.to_numeric(X['pickup_latitude'], errors='coerce')
+X['pickup_longitude'] = pd.to_numeric(X['pickup_longitude'], errors='coerce')
+
+# Remove infinite values
+X = X.replace([np.inf, -np.inf], np.nan)
+
+# Drop missing values
+before_rows = len(X)
+X = X.dropna()
+after_rows = len(X)
+
+st.write(f"🧹 Removed {before_rows - after_rows} invalid rows during cleaning.")
+
+if len(X) < 10:
+    st.error("Not enough valid data points after cleaning.")
+    st.stop()
 
 # ==========================================================
 # 3️⃣ Data Preprocessing (StandardScaler)
@@ -67,7 +90,7 @@ for eps in eps_values:
 # ==========================================================
 
 st.markdown("---")
-st.subheader("📈 Cluster Evaluation Results")
+st.subheader("📈 Cluster Evaluation")
 
 evaluation_data = []
 
@@ -170,4 +193,4 @@ else:
     st.warning("Best eps value = Not Applicable")
 
 st.markdown("---")
-st.info("ClusterCab Pro | Multi-Experiment Density-Based Clustering 🚕")
+st.info("ClusterCab Pro | Multi-Experiment DBSCAN Dashboard 🚕")
